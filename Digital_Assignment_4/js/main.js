@@ -37,6 +37,7 @@ export class Menu extends Phaser.Scene {
     }
     
     preload() {
+        this.load.audio("menu_music", "assets/menu_music2.mp3");
         this.load.video( "video", "assets/DA4_Menu_Creepy.webm", "loadeddata", false, true);
     }
     
@@ -46,6 +47,8 @@ export class Menu extends Phaser.Scene {
         this.bgVideo = this.add.video(400, 300, "video");
         
         this.bgVideo.play(true);
+        
+        this.sound.add("menu_music", { loop: false }).play();
 
         this.add.text(65, 75, "THREE NIGHTS IN THE WOODS", { fontSize: '46px', fill: '#FFF', stroke: '#000000', strokeThickness: 2 });
         

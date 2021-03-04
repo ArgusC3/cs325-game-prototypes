@@ -35,7 +35,7 @@ export class Level extends Phaser.Scene {
         this.hiding = false;
         this.hitBound = false;
         this.gotTool = false;
-        this.timeDelay = 1000 * 8;
+        this.timeDelay = 1000 * 10;
         this.hour = 8;
         this.chance = 0;
         this.idleMovUp = false;
@@ -139,7 +139,7 @@ export class Level extends Phaser.Scene {
             loop: true
         });
         
-        camera.fadeIn(4000);
+        camera.fadeIn(2000);
     }
     
     hud() {
@@ -156,6 +156,7 @@ export class Level extends Phaser.Scene {
         this.stickMarker.setDepth(20);
         this.stickNum.setDepth(20);
         this.timeText.setDepth(20);
+        this.dayText.setDepth(20);
     }
     
     timeCount() {
