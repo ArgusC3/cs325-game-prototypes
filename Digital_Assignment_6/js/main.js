@@ -8,6 +8,7 @@ import "./phaser.js";
 // https://www.w3schools.com/js/js_arrays.asp
 // https://phaser.discourse.group/t/delay-creation/1254
 // https://rexrainbow.github.io/phaser3-rex-notes/docs/site/keyboardevents/
+// https://www.w3schools.com/js/tryit.asp?filename=tryjs_array_remove
 
 
 class MyScene extends Phaser.Scene {
@@ -16,11 +17,19 @@ class MyScene extends Phaser.Scene {
         super();
         this.offset = 130;
         this.playerUnits;
+        this.playerNumUnits = 5;
         this.enemyUnits;
+        this.enemyNumUnits = 5;
         
         this.currentUnitNum = 0;
         this.activeUnit;
         this.playerTurn = true;
+        
+        this.defPos1 = new Phaser.Math.Vector2(5, 2);
+        this.defPos2 = new Phaser.Math.Vector2(4, 1);
+        this.playerPos;
+        
+        this.rnd = Phaser.Math.RND;
     }
     
     preload() {
@@ -106,6 +115,10 @@ class MyScene extends Phaser.Scene {
         
         this.input.keyboard.on('keyup-DOWN', function (event) {
             this.playerMoveUnit("DOWN");
+        }, this);
+        
+        this.input.keyboard.on('keyup-PERIOD', function (event) {
+            this.playerMoveUnit("No Movement");
         }, this);
         
         this.input.keyboard.on('keyup-A', function (event) {
@@ -211,6 +224,8 @@ class MyScene extends Phaser.Scene {
                     this.activeUnit.incSpaces();
                 }
                 break;
+            default:
+                this.activeUnit.incSpaces();
         }
         
         if(this.activeUnit.hasMoved()) {
@@ -218,7 +233,7 @@ class MyScene extends Phaser.Scene {
             this.currentUnitNum++;
         }
         
-        if(this.currentUnitNum > 5) {
+        if(this.currentUnitNum > this.playerNumUnits) {
             this.playerTurn = false;
             this.currentUnitNum = 0;
             this.activeUnit = this.enemyUnits[this.currentUnitNum];
@@ -243,6 +258,8 @@ class MyScene extends Phaser.Scene {
     enemyTimer() {
         this.turnText.setText("Computer Turn");
         
+        this.getPlayerPostion();
+        
         this.timer = this.time.addEvent({
             delay: 500,                // ms
             callback: this.enemyAI,
@@ -252,9 +269,9 @@ class MyScene extends Phaser.Scene {
     }
     
     enemyAI() {
-        this.enemyMoveUnit("DOWN");
+        this.enemyMoveLogic();
         
-        if(this.currentUnitNum > 5) {
+        if(this.currentUnitNum > this.enemyNumUnits) {
             this.playerTurn = true;
             this.turnText.setText("Player Turn");
             this.currentUnitNum = 0;
@@ -262,6 +279,92 @@ class MyScene extends Phaser.Scene {
             this.updateActiveUnit(this.activeUnit);
             this.timer.remove();
         }
+    }
+    
+    enemyMoveLogic() {
+        let tileXY = this.baseLayer.worldToTileXY(this.activeUnit.x, this.activeUnit.y);
+        let unitName = this.activeUnit.getName();
+        let pos = this.playerPos[this.currentUnitNum];
+        
+        if(unitName == "Artillery 1" && tileXY.y == this.defPos1.y) {
+            this.enemyMoveUnit("stop");
+            return;
+        }
+        
+        if(unitName == "Infantry 3") {
+            if(tileXY.equals(this.defPos2)) {
+                this.enemyMoveUnit("stop");
+            }
+            else if(tileXY.x < this.defPos2.x) {
+                this.enemyMoveUnit("RIGHT");
+            }
+            else if(tileXY.y < this.defPos2.y)
+            {
+                this.enemyMoveUnit("DOWN");
+            }
+            return;
+        }
+        
+        console.log("(" + pos.x + ", " + pos.y + ")");
+        
+        if(tileXY.equals(pos)) {
+            this.enemyMoveUnit("stop");
+        }
+        else if(tileXY.x < pos.x) {
+            this.enemyMoveUnit("RIGHT");
+        }
+        else if(tileXY.y < pos.y)
+        {
+            this.enemyMoveUnit("DOWN");
+        }
+        else if(tileXY.x > pos.x) {
+            this.enemyMoveUnit("LEFT");
+        }
+        else if(tileXY.y > pos.y)
+        {
+            this.enemyMoveUnit("UP");
+        }
+        
+    }
+    
+    // Get average tile vector of largest concentration of player units
+    getPlayerPostion() {
+        this.playerPos = [];
+        let i;
+        let count = 1;
+        let unit = this.playerUnits[0];
+        let avgPos = this.baseLayer.worldToTileXY(unit.x, unit.y);
+        let pos = this.baseLayer.worldToTileXY(unit.x, unit.y);
+        let temp;
+        let dist;
+        let x;
+        let y;
+        
+        for(i = 1; i < 6; i++) {
+            unit = this.playerUnits[i];
+            temp = this.baseLayer.worldToTileXY(unit.x, unit.y);
+            dist = pos.distance(temp);
+            
+            if(dist < 3) {
+                pos = temp;
+                count++;
+                avgPos.add(pos);
+            }
+        }
+        
+        
+        avgPos.x = Math.round(avgPos.x / count);
+        avgPos.y = Math.round(avgPos.y / count);
+        
+        
+        for(i = 0; i <= this.playerNumUnits; i++) {
+            x = Phaser.Math.Between(avgPos.x - 2, avgPos.x + 2);
+            y = Phaser.Math.Between(avgPos.y - 1, avgPos.y + 1);
+            this.playerPos.push({x, y});
+        }
+        
+        console.log("Final: (" + avgPos.x + ", " + avgPos.y + ")");
+        
     }
     
     enemyMoveUnit(direction) {
@@ -291,17 +394,33 @@ class MyScene extends Phaser.Scene {
                     this.activeUnit.incSpaces();
                 }
                 break;
+            default:
+                this.activeUnit.incSpaces();
         }
+        
+        this.enemyAttack();
         
         if(this.activeUnit.hasMoved()) {
             console.log("max spaces");
             this.currentUnitNum++;
         }
         
-        if(this.currentUnitNum <= 5) {
+        if(this.currentUnitNum <= this.enemyNumUnits) {
             this.activeUnit = this.enemyUnits[this.currentUnitNum];
             this.updateActiveUnit(this.activeUnit);
         }
+    }
+    
+    enemyAttack() {
+        let unitsInRange = this.activeUnit.getUnitsInRange(this.playerUnits);
+        let i;
+        let temp;
+        
+        if(unitsInRange.length <= 0) {
+            return;
+        }
+        
+        this.enemyAttackUnit(unitsInRange[0]);
     }
     
     playerAttack() {
@@ -349,13 +468,56 @@ class MyScene extends Phaser.Scene {
         
         
         this.selectKeys.ENTER.on('down', function (event) {
-             this.selectKeys.enabled = false;
-             this.playerTurn = true;
-             this.hitMarker.setVisible(false);
              infoWindow.destroy();
-             console.log("Attack!");
+             if(this.selectKeys.enabled == true)
+             {
+                 console.log("Attack!");
+                 this.playerAttackUnit(unitsInRange[i]);
+             }
         }, this);
         
+    }
+    
+    playerAttackUnit(unit) {
+        let attack = this.activeUnit.rollAttack();
+        let defense = unit.rollDefense();
+        let i;
+        console.log("Attack: " + attack + " Defense: " + defense);
+        
+        for(i = 0; i <= this.enemyNumUnits; i++) {
+            if(this.enemyUnits[i].getName() == unit.getName()) {
+                break;
+            }
+        }
+        
+        if(attack > defense) {
+            unit.destroy();
+            this.enemyUnits.splice(i, 1);
+            this.enemyNumUnits--;
+        }
+        
+        this.selectKeys.enabled = false;
+        this.playerTurn = true;
+        this.hitMarker.setVisible(false);
+    }
+    
+    enemyAttackUnit(unit) {
+        let attack = this.activeUnit.rollAttack();
+        let defense = unit.rollDefense();
+        let i;
+        console.log("Attack: " + attack + " Defense: " + defense);
+        
+        for(i = 0; i <= this.enemyNumUnits; i++) {
+            if(this.playerUnits[i].getName() == unit.getName()) {
+                break;
+            }
+        }
+        
+        if(attack > defense) {
+            unit.destroy();
+            this.playerUnits.splice(i, 1);
+            this.playerNumUnits--;
+        }
     }
     
     update() {
@@ -372,6 +534,10 @@ class Infantry extends Phaser.GameObjects.Sprite {
         this.playerUnit = playerUnit;
         this.maxMoves = 3;
         this.spacesMoved = 0;
+        
+        if(!this.playerUnit) {
+            this.tint = 0xFF0000
+        }
     }
     
     hasMoved() {
@@ -395,12 +561,20 @@ class Infantry extends Phaser.GameObjects.Sprite {
         return this.maxMoves - this.spacesMoved;
     }
     
+    rollAttack() {
+        return Phaser.Math.Between(1, 6);
+    }
+    
+    rollDefense() {
+        return Phaser.Math.Between(1, 6);
+    }
+    
     getUnitsInRange(unitArray) {
         let unitsInRange = [];
         let dist;
         let i;
         
-        for(i = 0; i < 6; i++) {
+        for(i = 0; i < unitArray.length; i++) {
             dist = Phaser.Math.Distance.Between(this.x, this.y, unitArray[i].x, unitArray[i].y);
             if(dist < 85) {
                 unitsInRange.push(unitArray[i]);
@@ -421,6 +595,10 @@ class Artillery extends Phaser.GameObjects.Sprite {
         this.playerUnit = playerUnit;
         this.maxMoves = 2;
         this.spacesMoved = 0;
+        
+        if(!this.playerUnit) {
+            this.tint = 0xFF0000
+        }
     }
     
     hasMoved() {
@@ -439,9 +617,17 @@ class Artillery extends Phaser.GameObjects.Sprite {
     getName() {
         return "Artillery " + this.id;
     }
-    
+            
     getSpacesLeft() {
         return this.maxMoves - this.spacesMoved;
+    }
+    
+    rollAttack() {
+        return Phaser.Math.Between(1, 12);
+    }
+    
+    rollDefense() {
+        return Phaser.Math.Between(1, 4);
     }
     
     getUnitsInRange(unitArray) {
@@ -449,9 +635,9 @@ class Artillery extends Phaser.GameObjects.Sprite {
         let dist;
         let i;
         
-        for(i = 0; i < 6; i++) {
+        for(i = 0; i < unitArray.length; i++) {
             dist = Phaser.Math.Distance.Between(this.x, this.y, unitArray[i].x, unitArray[i].y);
-            if(dist < 85) {
+            if(dist < 85) {        
                 unitsInRange.push(unitArray[i]);
                 console.log(unitArray[i].getName());
             }
@@ -461,7 +647,7 @@ class Artillery extends Phaser.GameObjects.Sprite {
     }
 }
 
-class Cavalry extends Phaser.GameObjects.Sprite {
+class Cavalry extends Phaser.        GameObjects.Sprite {
     constructor(config, id, playerUnit) {
         super(config.scene, config.x, config.y, "cavalry");
         config.scene.add.existing(this);
@@ -470,6 +656,10 @@ class Cavalry extends Phaser.GameObjects.Sprite {
         this.playerUnit = playerUnit;
         this.maxMoves = 4;
         this.spacesMoved = 0;
+        
+        if(!this.playerUnit) {
+            this.tint = 0xFF0000
+        }
     }
     
     hasMoved() {
@@ -493,12 +683,20 @@ class Cavalry extends Phaser.GameObjects.Sprite {
         return this.maxMoves - this.spacesMoved;
     }
     
+    rollAttack() {
+        return Phaser.Math.Between(1, 10);
+    }
+    
+    rollDefense() {
+        return Phaser.Math.Between(1, 4);
+    }
+    
     getUnitsInRange(unitArray) {
         let unitsInRange = [];
         let dist;
         let i;
         
-        for(i = 0; i < 6; i++) {
+        for(i = 0; i < unitArray.length; i++) {
             dist = Phaser.Math.Distance.Between(this.x, this.y, unitArray[i].x, unitArray[i].y);
             if(dist < 85) {
                 unitsInRange.push(unitArray[i]);
