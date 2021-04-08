@@ -6,6 +6,8 @@ import "./phaser.js";
 // https://www.w3schools.com/js/js_switch.asp
 // https://rexrainbow.github.io/phaser3-rex-notes/docs/site/gameobject/
 // https://www.w3schools.com/js/js_arrays.asp
+// https://phaser.discourse.group/t/delay-creation/1254
+// https://rexrainbow.github.io/phaser3-rex-notes/docs/site/keyboardevents/
 
 
 class MyScene extends Phaser.Scene {
@@ -18,6 +20,7 @@ class MyScene extends Phaser.Scene {
         
         this.currentUnitNum = 0;
         this.activeUnit;
+        this.playerTurn = true;
     }
     
     preload() {
@@ -35,16 +38,18 @@ class MyScene extends Phaser.Scene {
         const map = this.make.tilemap({ key: "map" });
         const tileset = map.addTilesetImage("DA6_Tiles", "tiles");
         
-        const baseLayer = map.createLayer("Base", tileset, this.offset, 0);
+        this.baseLayer = map.createLayer("Base", tileset, this.offset, 0);
         const terrainLayer = map.createLayer("Terrain", tileset, this.offset, 0);
         this.terrainObj = map.getObjectLayer("TerrainObj")["objects"];
         
-        let infoWindow = this.add.container(850, 200);
-        let screen = this.add.image(0, 0, "info");
-        this.unitName = this.add.text(-110, -75, "Unit: ", { fontSize: "20px", fill: "#FFCC00"});
-        this.unitSpaces = this.add.text(-110, -25, "Moves Left: ", { fontSize: "20px", fill: "#FFCC00"});
+        this.marker = this.add.graphics();
+        this.marker.fillStyle(0xFFCC00, 0.5);
+        this.marker.fillRect(0, 0, map.tileWidth, map.tileHeight);
         
-        infoWindow.add([screen, this.unitName, this.unitSpaces]);
+        this.hitMarker = this.add.graphics();
+        this.hitMarker.fillStyle(0xFFB000, 0.5);
+        this.hitMarker.fillRect(0, 0, map.tileWidth, map.tileHeight);
+        this.hitMarker.setVisible(false);
         
         this.mapX = map.widthInPixels;
         this.mapY = map.heightInPixels;
@@ -79,8 +84,13 @@ class MyScene extends Phaser.Scene {
         
         this.createPlayerUnits();
         this.createEnemyUnits();
+        this.unitInfoScreen();
         
-        this.cursors = this.input.keyboard.createCursorKeys();
+        this.turnText = this.add.text(this.mapX + this.offset + 50, 50, "Player Turn", { fontSize: "30px", fill: "#FFCC00"});
+        
+        //this.cursors = this.input.keyboard.createCursorKeys();
+        this.selectKeys = this.input.keyboard.addKeys('C,ENTER');
+        this.selectKeys.enabled = false;
         
         this.input.keyboard.on('keyup-RIGHT', function (event) {
             this.playerMoveUnit("RIGHT");
@@ -97,6 +107,24 @@ class MyScene extends Phaser.Scene {
         this.input.keyboard.on('keyup-DOWN', function (event) {
             this.playerMoveUnit("DOWN");
         }, this);
+        
+        this.input.keyboard.on('keyup-A', function (event) {
+            this.playerAttack();
+        }, this);
+        
+         
+    }
+    
+    unitInfoScreen() {
+        this.activeUnit = this.playerUnits[this.currentUnitNum];
+        
+        let infoWindow = this.add.container(850, 200);
+        let screen = this.add.image(0, 0, "info");
+        this.unitName = this.add.text(-110, -75, "Unit: " + this.activeUnit.getName(), { fontSize: "20px", fill: "#FFCC00"});
+        this.unitSpaces = this.add.text(-110, -25, "Moves Left: " + this.activeUnit.getSpacesLeft(), { fontSize: "20px", fill: "#FFCC00"});
+        infoWindow.add([screen, this.unitName, this.unitSpaces]);
+        
+        this.updateActiveUnit(this.activeUnit);
     }
     
     createPlayerUnits() {
@@ -154,32 +182,36 @@ class MyScene extends Phaser.Scene {
     }
     
     playerMoveUnit(direction) {
-        this.activeUnit = this.playerUnits[this.currentUnitNum];
-        
-        this.unitName.setText("Unit: " + this.activeUnit.getName());
-        this.unitSpaces.setText("Moves Left: " + this.activeUnit.getSpacesLeft()); 
-        
-        switch(direction) {
-            case "RIGHT":
-                this.activeUnit.x += 60;
-                this.activeUnit.incSpaces();
-                break;
-            case "LEFT":
-                this.activeUnit.x -= 60;
-                this.activeUnit.incSpaces();
-                break;
-            case "UP":
-                this.activeUnit.y -= 60;
-                this.activeUnit.incSpaces();
-                break;
-            case "DOWN":
-                this.activeUnit.y += 60;
-                this.activeUnit.incSpaces();
-                break;
+        if(!this.playerTurn) {
+            return;
         }
         
-        this.unitName.setText("Unit: " + this.activeUnit.getName());
-        this.unitSpaces.setText("Moves Left: " + this.activeUnit.getSpacesLeft());
+        switch(direction) {        
+            case "RIGHT":
+                if((this.activeUnit.x + 60) < (this.mapX + this.offset)) {
+                    this.activeUnit.x += 60;
+                    this.activeUnit.incSpaces();
+                }
+                break;
+            case "LEFT":
+                if((this.activeUnit.x - 60) > this.offset) {
+                    this.activeUnit.x -= 60;
+                    this.activeUnit.incSpaces();
+                }
+                break;
+            case "UP":
+                if((this.activeUnit.y - 60) > 0) {
+                    this.activeUnit.y -= 60;
+                    this.activeUnit.incSpaces();
+                }
+                break;
+            case "DOWN":
+                if((this.activeUnit.y + 60) < this.mapY) {
+                    this.activeUnit.y += 60;
+                    this.activeUnit.incSpaces();
+                }
+                break;
+        }
         
         if(this.activeUnit.hasMoved()) {
             console.log("max spaces");
@@ -187,8 +219,143 @@ class MyScene extends Phaser.Scene {
         }
         
         if(this.currentUnitNum > 5) {
+            this.playerTurn = false;
             this.currentUnitNum = 0;
+            this.activeUnit = this.enemyUnits[this.currentUnitNum];
+            this.updateActiveUnit(this.activeUnit);
+            this.enemyTimer();
         }
+        else {
+            this.activeUnit = this.playerUnits[this.currentUnitNum];
+            this.updateActiveUnit(this.activeUnit);
+        }
+    }
+    
+    updateActiveUnit(activeUnit) {
+        this.unitName.setText("Unit: " + activeUnit.getName());
+        this.unitSpaces.setText("Moves Left: " + activeUnit.getSpacesLeft());
+        
+        const pointerTileXY = this.baseLayer.worldToTileXY(activeUnit.x, activeUnit.y);
+        const snappedWorldPoint = this.baseLayer.tileToWorldXY(pointerTileXY.x, pointerTileXY.y);
+        this.marker.setPosition(snappedWorldPoint.x, snappedWorldPoint.y);
+    }
+    
+    enemyTimer() {
+        this.turnText.setText("Computer Turn");
+        
+        this.timer = this.time.addEvent({
+            delay: 500,                // ms
+            callback: this.enemyAI,
+            callbackScope: this,
+            loop: true
+        });
+    }
+    
+    enemyAI() {
+        this.enemyMoveUnit("DOWN");
+        
+        if(this.currentUnitNum > 5) {
+            this.playerTurn = true;
+            this.turnText.setText("Player Turn");
+            this.currentUnitNum = 0;
+            this.activeUnit = this.playerUnits[this.currentUnitNum];
+            this.updateActiveUnit(this.activeUnit);
+            this.timer.remove();
+        }
+    }
+    
+    enemyMoveUnit(direction) {
+        
+        switch(direction) {        
+            case "RIGHT":
+                if((this.activeUnit.x + 60) < (this.mapX + this.offset)) {
+                    this.activeUnit.x += 60;
+                    this.activeUnit.incSpaces();
+                }
+                break;
+            case "LEFT":
+                if((this.activeUnit.x - 60) > this.offset) {
+                    this.activeUnit.x -= 60;
+                    this.activeUnit.incSpaces();
+                }
+                break;
+            case "UP":
+                if((this.activeUnit.y - 60) > 0) {
+                    this.activeUnit.y -= 60;
+                    this.activeUnit.incSpaces();
+                }
+                break;
+            case "DOWN":
+                if((this.activeUnit.y + 60) < this.mapY) {
+                    this.activeUnit.y += 60;
+                    this.activeUnit.incSpaces();
+                }
+                break;
+        }
+        
+        if(this.activeUnit.hasMoved()) {
+            console.log("max spaces");
+            this.currentUnitNum++;
+        }
+        
+        if(this.currentUnitNum <= 5) {
+            this.activeUnit = this.enemyUnits[this.currentUnitNum];
+            this.updateActiveUnit(this.activeUnit);
+        }
+    }
+    
+    playerAttack() {
+        let unitsInRange = this.activeUnit.getUnitsInRange(this.enemyUnits);
+        let i;
+        let temp;
+        
+        if(unitsInRange.length <= 0) {
+            return;
+        }
+        
+        this.playerTurn = false;
+        this.hitMarker.setVisible(true);
+        this.selectKeys.enabled = true;
+        
+        let infoWindow = this.add.container(850, 400);
+        let attackText = this.add.text(-110, -75, "Units in Range", { fontSize: "20px", fill: "#FFCC00"});
+        
+        infoWindow.add(attackText);
+        
+        for(i = 0; i < unitsInRange.length; i++) {
+            temp = this.add.text(-110, -50 + (20 * i), "" + (i+1) + ") " + unitsInRange[i].getName(), { fontSize: "20px", fill: "#FFCC00"});
+            infoWindow.add(temp);
+        }
+        temp = this.add.text(-110, -50 + (40 * i), "Press 'C' to cycle units. Press ENTER to attack.", { fontSize: "20px", fill: "#FFCC00", wordWrap: { width: 200 }});
+        infoWindow.add(temp);
+        i = 0;
+        
+        
+        
+        let pointerTileXY = this.baseLayer.worldToTileXY(unitsInRange[i].x, unitsInRange[i].y);
+        let snappedWorldPoint = this.baseLayer.tileToWorldXY(pointerTileXY.x, pointerTileXY.y);
+        this.hitMarker.setPosition(snappedWorldPoint.x, snappedWorldPoint.y);
+        
+        this.selectKeys.C.on('down', function (event) {
+             i++;
+             if(i >= unitsInRange.length) {
+                 i = 0;
+             }
+             
+             pointerTileXY = this.baseLayer.worldToTileXY(unitsInRange[i].x, unitsInRange[i].y);
+             snappedWorldPoint = this.baseLayer.tileToWorldXY(pointerTileXY.x, pointerTileXY.y);
+             this.hitMarker.setPosition(snappedWorldPoint.x, snappedWorldPoint.y);
+        }, this);
+        
+        
+        this.selectKeys.ENTER.on('down', function (event) {
+             this.selectKeys.enabled = false;
+             this.playerTurn = true;
+             this.hitMarker.setVisible(false);
+             infoWindow.destroy();
+             console.log("Attack!");
+        }, this);
+        
     }
     
     update() {
@@ -227,6 +394,22 @@ class Infantry extends Phaser.GameObjects.Sprite {
     getSpacesLeft() {
         return this.maxMoves - this.spacesMoved;
     }
+    
+    getUnitsInRange(unitArray) {
+        let unitsInRange = [];
+        let dist;
+        let i;
+        
+        for(i = 0; i < 6; i++) {
+            dist = Phaser.Math.Distance.Between(this.x, this.y, unitArray[i].x, unitArray[i].y);
+            if(dist < 85) {
+                unitsInRange.push(unitArray[i]);
+                console.log(unitArray[i].getName());
+            }
+        }
+        
+        return unitsInRange;
+    }
 }
 
 class Artillery extends Phaser.GameObjects.Sprite {
@@ -260,6 +443,22 @@ class Artillery extends Phaser.GameObjects.Sprite {
     getSpacesLeft() {
         return this.maxMoves - this.spacesMoved;
     }
+    
+    getUnitsInRange(unitArray) {
+        let unitsInRange = [];
+        let dist;
+        let i;
+        
+        for(i = 0; i < 6; i++) {
+            dist = Phaser.Math.Distance.Between(this.x, this.y, unitArray[i].x, unitArray[i].y);
+            if(dist < 85) {
+                unitsInRange.push(unitArray[i]);
+                console.log(unitArray[i].getName());
+            }
+        }
+        
+        return unitsInRange;
+    }
 }
 
 class Cavalry extends Phaser.GameObjects.Sprite {
@@ -292,6 +491,22 @@ class Cavalry extends Phaser.GameObjects.Sprite {
     
     getSpacesLeft() {
         return this.maxMoves - this.spacesMoved;
+    }
+    
+    getUnitsInRange(unitArray) {
+        let unitsInRange = [];
+        let dist;
+        let i;
+        
+        for(i = 0; i < 6; i++) {
+            dist = Phaser.Math.Distance.Between(this.x, this.y, unitArray[i].x, unitArray[i].y);
+            if(dist < 85) {
+                unitsInRange.push(unitArray[i]);
+                console.log(unitArray[i].getName());
+            }
+        }
+        
+        return unitsInRange;
     }
 }
 
